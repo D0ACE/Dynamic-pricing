@@ -241,7 +241,7 @@ unemployment_rate = st.sidebar.slider("Unemployment Rate (%)", 0.0, 10.0, 4.3, k
 col_title, col_currency = st.columns([4, 1])
 
 with col_title:
-    st.title("Airline Booking Demand Forecasting and Dynamic Pricing Optimization")
+    st.title("Dynamic Airline Ticket Pricing System")
     st.write("")
     # st.caption("Dynamic Price Model")
     # Display custom subheading with airline name

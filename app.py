@@ -386,6 +386,12 @@ if 0 < st.session_state.scenario_step <= num_scenarios:
             value=booking_date,
             key=f"scenario_booking_{scenario_number}"
         )
+        
+        # Validation: Check if scenario booking date is after flight date
+        if scenario_booking_date > flight_date:
+            st.error(f"❌ ERROR: Booking date cannot be after the flight date ({flight_date})! The flight will have already taken off by then.")
+            st.stop()
+        
         scenario_fare = st.selectbox(f"Fare Class (Scenario {scenario_number})",
                                     ["Discount", "Regular", "Premium"],
                                     index=["Discount", "Regular", "Premium"].index(fare_class),
@@ -398,6 +404,11 @@ if 0 < st.session_state.scenario_step <= num_scenarios:
         
         # Calculate days until flight dynamically
         days_until_flight = (flight_date - scenario_booking_date).days
+        
+        # Additional validation: Check if days_until_flight is negative (shouldn't happen after above check, but just in case)
+        if days_until_flight < 0:
+            st.error(f"❌ ERROR: Invalid booking date! Booking date ({scenario_booking_date}) is after flight date ({flight_date}).")
+            st.stop()
         
         # Calculate hours until flight for same-day bookings
         if scenario_booking_date == flight_date:
@@ -468,10 +479,16 @@ if 0 < st.session_state.scenario_step <= num_scenarios:
         st.metric("Booking Date", scenario_booking_date.strftime("%m/%d"))
 
     if st.button(f'✅ Confirm Scenario {scenario_number}', type="primary", key=f"confirm_scenario_{scenario_number}_button"):
-        st.session_state.selected_scenarios.append(scenario_data)
-        st.session_state.scenario_step += 1
-        st.success(f"Scenario {scenario_number} saved!")
-        st.rerun()
+        # Final validation before saving scenario
+        if scenario_booking_date > flight_date:
+            st.error(f"❌ ERROR: Cannot save scenario! Booking date ({scenario_booking_date}) is after flight date ({flight_date}).")
+        elif days_until_flight < 0:
+            st.error(f"❌ ERROR: Cannot save scenario! Invalid date combination.")
+        else:
+            st.session_state.selected_scenarios.append(scenario_data)
+            st.session_state.scenario_step += 1
+            st.success(f"Scenario {scenario_number} saved!")
+            st.rerun()
 
 # Once all scenarios are selected
 if st.session_state.scenario_step > num_scenarios:

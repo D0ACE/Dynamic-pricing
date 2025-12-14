@@ -189,7 +189,7 @@ departure_airports = [f"{name} ({code})" for code, name in airport_mapping.items
 arrival_airports = departure_airports
 
 # Sidebar for inputs
-st.sidebar.image("img/Bethel (2).gif", width=250)  # Add your logo here
+#st.sidebar.image("img/CANQUER_labs.png", width=250)  # CANQUER labs logo
 st.sidebar.title("Flight Details")
 
 

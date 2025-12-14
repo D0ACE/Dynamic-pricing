@@ -14,7 +14,7 @@ import plotly.express as px
 
 #Problem Statement : https://docs.google.com/document/d/1bnKJLT-WC6Hz5--kl00IHjgkeFiXid0u5kuydSq69ZI/edit
 # Load the dataset - Use optimal amount for speed and accuracy
-df = pd.read_csv('processed_airline_data_sample.csv')
+df = pd.read_csv('updated_processed_airline_data.csv')
 # Use 3000 rows for faster training while maintaining accuracy
 df = df.head(3000) if len(df) > 3000 else df
 # Define categorical features globally
@@ -52,22 +52,29 @@ def preprocess_data(df):
     df['Days_Until_Flight'] = (pd.to_datetime(df['Flight_Date']) - pd.to_datetime(df['Booking_Date'])).dt.days
     
     # Create dynamic surge pricing based on days until flight
-    # Closer to flight date = higher prices (exponential increase)
+    # Only apply surge for bookings within 50 days
+    # Bookings 90+ days in advance get normal pricing (no surge)
     def calculate_surge(days_until):
-        if days_until <= 1:
-            return 3.5  # Same day/next day = 3.5x surge! (increased from 3.0)
+        if days_until > 90:
+            return 1.0  # 90+ days = normal price, no surge
+        elif days_until > 50:
+            return 1.0  # 51-90 days = normal price
+        elif days_until == 0:
+            return 4.5  # SAME DAY booking = 4.5x surge! EXTREME premium
+        elif days_until <= 1:
+            return 3.8  # Next day = 3.8x surge!
         elif days_until <= 3:
-            return 3.2  # 2-3 days = 3.2x surge (increased from 2.8)
+            return 3.2  # 2-3 days = 3.2x surge
         elif days_until <= 7:
-            return 2.8  # 4-7 days = 2.8x surge (increased from 2.5)
+            return 2.8  # 4-7 days = 2.8x surge
         elif days_until <= 14:
-            return 2.2  # 8-14 days = 2.2x surge (increased from 1.8)
+            return 2.2  # 8-14 days = 2.2x surge
         elif days_until <= 30:
-            return 1.5  # 15-30 days = 1.5x surge (increased from 1.3)
-        elif days_until <= 60:
-            return 1.2  # 31-60 days = 1.2x surge (increased from 1.1)
+            return 1.5  # 15-30 days = 1.5x surge
+        elif days_until <= 50:
+            return 1.2  # 31-50 days = 1.2x surge
         else:
-            return 1.0  # 60+ days = base price
+            return 1.0  # Should not reach here
     
     df['Surge_Factor'] = df['Days_Until_Flight'].apply(calculate_surge)
     
@@ -305,6 +312,28 @@ with col5:
 with col6:
     booking_time = st.time_input("Booking Time", pd.to_datetime('09:00').time(), key="booking_time_input")
 
+# Validation 1: Check if booking date is after flight date
+from datetime import datetime, timedelta
+
+if booking_date > flight_date:
+    st.error("❌ ERROR: Booking date cannot be after the flight date! The flight will have already taken off by then.")
+    st.stop()
+
+# Validation 2: Check if flight is within 2 hours from booking time (same day)
+if booking_date == flight_date:
+    booking_datetime = datetime.combine(booking_date, booking_time)
+    flight_datetime = datetime.combine(flight_date, flight_time)
+    time_until_flight = flight_datetime - booking_datetime
+    hours_until_flight = time_until_flight.total_seconds() / 3600
+    
+    if hours_until_flight < 2:
+        st.error("🚫 BOOKING CLOSED: Flight departs in less than 2 hours! Online booking is no longer available.")
+        st.warning("Please contact the airline directly or visit the airport ticket counter.")
+        st.stop()
+    elif hours_until_flight < 0:
+        st.error("❌ ERROR: Flight time has already passed! Please select a later flight time.")
+        st.stop()
+
 # Determine the image path based on the selected airline
 image_path = f"img/{airline_name}.png"
 default_image_path = "img/Other.png"
@@ -370,17 +399,33 @@ if 0 < st.session_state.scenario_step <= num_scenarios:
         # Calculate days until flight dynamically
         days_until_flight = (flight_date - scenario_booking_date).days
         
+        # Calculate hours until flight for same-day bookings
+        if scenario_booking_date == flight_date:
+            scenario_booking_datetime = datetime.combine(scenario_booking_date, booking_time)
+            flight_datetime = datetime.combine(flight_date, flight_time)
+            hours_until = (flight_datetime - scenario_booking_datetime).total_seconds() / 3600
+            
+            if hours_until < 2:
+                st.error("🚫 CLOSED: Less than 2 hours!")
+            else:
+                st.error(f"🔥 SAME DAY! Extreme Premium ({hours_until:.1f}h until flight)")
         # Show dynamic pricing indicator based on days until flight
-        if days_until_flight <= 1:
-            st.error("🔥 SAME DAY! Highest Prices")
+        elif days_until_flight > 90:
+            st.success("✅ 90+ Days - Best Price! (No Surge)")
+        elif days_until_flight > 50:
+            st.success("✅ 50+ Days - Normal Pricing")
+        elif days_until_flight <= 1:
+            st.error("🚨 NEXT DAY! Very High Prices")
         elif days_until_flight <= 3:
-            st.error("🚨 2-3 Days - Very High")
+            st.error("⚠️ 2-3 Days - Very High")
         elif days_until_flight <= 7:
-            st.warning("⚠️ Under a Week - High")
+            st.warning("⏰ Under a Week - High")
         elif days_until_flight <= 14:
             st.warning("📅 2 Weeks - Moderate")
         elif days_until_flight <= 30:
             st.info("📌 1 Month - Good")
+        elif days_until_flight <= 50:
+            st.info("🎯 Under 50 Days - Slight Premium")
         else:
             st.success("✅ Advanced - Best Price")
 
@@ -470,8 +515,15 @@ if st.session_state.scenario_step > num_scenarios:
             scenario_df['Days_Until_Flight'] = days_until
             
             # Dynamic surge based on days until flight (exponential increase as flight approaches)
-            if days_until <= 1:
-                surge = 3.5  # Same day/next day
+            # Only apply surge for bookings within 50 days
+            if days_until > 90:
+                surge = 1.0  # 90+ days = normal price
+            elif days_until > 50:
+                surge = 1.0  # 51-90 days = normal price
+            elif days_until == 0:
+                surge = 4.5  # SAME DAY booking - EXTREME!
+            elif days_until <= 1:
+                surge = 3.8  # Next day
             elif days_until <= 3:
                 surge = 3.2  # 2-3 days
             elif days_until <= 7:
@@ -480,10 +532,10 @@ if st.session_state.scenario_step > num_scenarios:
                 surge = 2.2  # 8-14 days
             elif days_until <= 30:
                 surge = 1.5  # 15-30 days
-            elif days_until <= 60:
-                surge = 1.2  # 31-60 days
+            elif days_until <= 50:
+                surge = 1.2  # 31-50 days
             else:
-                surge = 1.0  # 60+ days
+                surge = 1.0  # Fallback
             
             scenario_df['Surge_Factor'] = surge
             
@@ -515,8 +567,17 @@ if st.session_state.scenario_step > num_scenarios:
             # Reorder columns to match the order during training
             X_prepared = X_prepared.reindex(columns=final_feature_order, fill_value=0)
 
-            # Predict pricing
-            optimized_price = pricing_model.predict(X_prepared)[0]
+            # Get base price by setting surge factor to 1.0 (normal pricing)
+            X_prepared_base = X_prepared.copy()
+            if 'Surge_Factor' in X_prepared_base.columns:
+                X_prepared_base['Surge_Factor'] = 1.0
+            
+            # Predict base pricing (without surge)
+            base_price = pricing_model.predict(X_prepared_base)[0]
+            
+            # Apply surge factor directly to ensure correct pricing
+            # Same-day bookings (surge=4.5) should be more expensive than next-day (surge=3.8)
+            optimized_price = base_price * surge
 
             # Display the scenario label above the price box
             with cols[i]:
